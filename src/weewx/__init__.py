@@ -136,6 +136,10 @@ class NEW_ARCHIVE_RECORD:
     """Event issued when a new archive record is available. The event contains
     attribute 'record', which is the new archive record."""
 
+class POST_RECORD_AUGMENTATION:
+    """Event issued after an archive record has been augmented by the services.
+    The event contains attribute 'record', which is the 'final' archive record.
+    Services should not update the record."""
 
 class POST_LOOP:
     """Event issued right after the main loop has been broken. Services hook

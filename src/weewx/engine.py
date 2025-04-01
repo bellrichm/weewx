@@ -585,6 +585,7 @@ class StdArchive(StdService):
         self.bind(weewx.CHECK_LOOP, self.check_loop)
         self.bind(weewx.POST_LOOP, self.post_loop)
         self.bind(weewx.NEW_ARCHIVE_RECORD, self.new_archive_record)
+        self.bind(weewx.POST_RECORD_AUGMENTATION, self.post_record_augmentation)
 
     def startup(self, _unused):
         """Called when the engine is starting up. Main task is to set up the database, backfill it,
@@ -688,7 +689,7 @@ class StdArchive(StdService):
 
     def new_archive_record(self, event):
         """Called when a new archive record has arrived.
-        Put it in the archive database."""
+        If requested, augment the record with data from the loop packets."""
 
         # If requested, extract any extra information we can out of the accumulator and put it in
         # the record. Not necessary in the case of software record generation because it has
@@ -698,6 +699,14 @@ class StdArchive(StdService):
                 and event.record['dateTime'] == self.old_accumulator.timespan.stop \
                 and event.origin != 'software':
             self.old_accumulator.augmentRecord(event.record)
+
+        self.engine.dispatchEvent(weewx.Event(weewx.POST_RECORD_AUGMENTATION, 
+                                              record=event.record,
+                                              origin=event.origin))
+
+    def post_record_augmentation(self, event):
+        """Called after the archive record has been augmented with loop packet data.
+        Put the final record into the database."""
 
         dbmanager = self.engine.db_binder.get_manager(self.data_binding)
         dbmanager.addRecord(event.record,
