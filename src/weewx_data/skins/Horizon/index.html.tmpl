@@ -72,6 +72,8 @@
   #end for
           </select>
 #end if
+          <a class="masthead-link" href="statistics.html">$gettext("Statistics")</a>
+          <a class="masthead-link" href="celestial.html">$gettext("Celestial")</a>
 #if $to_bool($DisplayOptions.get('show_reports', True))
           <a class="masthead-link" href="reports.html">$gettext("Reports")</a>
 #end if
@@ -169,6 +171,8 @@
 
     </div>
 
+    #include "top.inc"
+
     <script src="uplot.min.js"></script>
     <script>
       window.HORIZON = {
@@ -188,7 +192,7 @@
           showData: "$gettext('Show data as table')",
           time: "$gettext('Time')",
           now: "$gettext('Now')",
-          asConfigured: "$gettext('As configured')",
+          asConfigured: "$gettext('Default')",
           earlier: "$gettext('Earlier')",
           later: "$gettext('Later')",
           thinned: "$gettext('thinned')",
