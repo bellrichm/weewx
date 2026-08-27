@@ -161,7 +161,9 @@ a { color: var(--accent); text-underline-offset: 2px; }
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.5rem 1rem;
+  /* Narrow between columns, because two of them are buttons standing side by side.
+     What keeps the heading clear of them is the auto margin below, not this. */
+  gap: 0.5rem 0.4rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
 }
@@ -181,7 +183,74 @@ a { color: var(--accent); text-underline-offset: 2px; }
   font-variant-numeric: tabular-nums;
 }
 
-.masthead-tools { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; }
+.masthead { position: relative; }
+
+.masthead-tools { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; order: 1; }
+
+/* The theme switch stands outside the menu, so the order has to put it back where it
+   stood while it was inside: at the end of the row, with the menu button after it.
+
+   Both are centred against the row rather than sat on its baseline. A 2.25rem button
+   is taller than the links beside it, and a shared baseline then leaves it standing
+   a few pixels high. It used to be centred inside .masthead-tools, and this is what
+   keeps it looking the same now that it is not. */
+.masthead > .icon-button,
+.masthead-tools { align-self: center; }
+.masthead > .icon-button { flex: none; }
+.masthead > .theme-toggle { order: 2; }
+.masthead > .nav-toggle { order: 3; }
+
+/* The menu button, hidden until the controls stop fitting. Both class names, because
+   .icon-button sets display too and is declared further down. */
+.icon-button.nav-toggle { display: none; }
+
+/* The controls do not fit across a phone, and a masthead wider than the page is a
+   page that scrolls sideways. Below this width they fold into a panel under the
+   button, leaving the two buttons alone on the row.
+
+   The panel is positioned against .masthead rather than against the page, so it opens
+   under the button wherever the heading has pushed it. */
+@media (max-width: 40rem) {
+  .icon-button.nav-toggle {
+    display: inline-flex;
+  }
+
+  /* The pair is pushed across together, so the switch carries the margin. */
+  .masthead > .theme-toggle { margin-left: auto; }
+
+  .masthead-tools {
+    display: none;
+    position: absolute;
+    top: calc(100% - 0.4rem);
+    right: 0;
+    z-index: 30;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.15rem;
+    min-width: 11rem;
+    max-width: min(16rem, calc(100vw - 2rem));
+    padding: 0.4rem;
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
+  }
+
+  .masthead-tools[data-open] { display: flex; }
+
+  /* Full-width rows in the panel, rather than the chips they are on a wide screen. */
+  .masthead-tools .masthead-link {
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius);
+  }
+  .masthead-tools select {
+    width: 100%;
+    max-width: none;
+    padding: 0.5rem 0.6rem;
+    font-size: var(--fs-sm);
+  }
+}
 
 .icon-button {
   display: inline-flex;
@@ -811,6 +880,19 @@ select.report-select {
 .panel:has(.range-bar) .panel-head { top: 0; }
 .range-bar { top: var(--head-height, 2.9rem); border-bottom: 1px solid var(--border); }
 
+/* A row of tabs wider than its panel. On a phone the record tables offer five, which
+   is about twice what fits. They scroll rather than being cut off: a tab nobody can
+   reach is a tab that is not there. The scrollbar itself is left out, because the row
+   is short and a bar under it would take a third of its height. */
+.tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs > button { flex: none; }
+
 .range-nav {
   grid-column: 2;
   display: flex;
@@ -1328,6 +1410,119 @@ select.report-select {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+
+/* ---------------------------------------------------------------- climate */
+
+/* The counted days, and the record year by year. Both are wide tables of numbers, so
+   the row heading carries its own definition and the months stay narrow. */
+.climate-days th[scope="row"],
+.climate-record th[scope="row"] { white-space: nowrap; }
+
+.climate-rule {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* The unit a row of the statistics tables is written in. Without it the numbers
+   change when the reader picks another unit and nothing says why. */
+.stat-unit {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* The year's own total, which is what most readers came for. */
+.climate-total { font-weight: 600; color: var(--ink); }
+
+/* A month with none of that kind of day. Present, so the row keeps its shape, and
+   quiet, so the months that do have some are what the eye lands on. */
+.climate-none { color: var(--ink-faint); }
+
+.climate-chart { width: 100%; min-height: 260px; }
+
+/* One line saying how to read the picture above it. */
+.climate-note {
+  margin: 0.4rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+
+/* One square per day of the year: a column per week, a row per weekday. The colour
+   runs from the page's own surface to the colour it uses for cold and wet. */
+.climate-heatmap { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.hm-grid, .hm-months {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hm-months { font-size: var(--fs-xs); color: var(--ink-faint); }
+
+/* Rows of a fixed height rather than a share of the panel: a square that grows with
+   the width of the page stops looking like a day and starts looking like a block. */
+.hm-grid { grid-template-rows: repeat(7, 0.85rem); }
+
+.hm-cell {
+  border-radius: 2px;
+  /* --hm is 0 for a dry day and 1 for the wettest of the year. */
+  background: color-mix(in oklab, var(--lo) calc(var(--hm, 0) * 100%), var(--surface-sunk));
+}
+
+/* The days at either end that belong to the year before or after. Kept so that every
+   column is a whole week, and left blank so they are not read as readings. */
+.hm-outside { background: none; }
+
+/* A day inside the year that the station did not record. Outlined rather than
+   filled: a day with no reading is not a day with a reading of nothing. */
+.hm-empty {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.hm-dow, .hm-month {
+  grid-column: 1;
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+}
+
+.hm-month { justify-content: flex-start; }
+
+.hm-key {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+  margin-left: 2.2rem;
+}
+
+.hm-ramp {
+  width: 6rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--surface-sunk), var(--lo));
+}
+
+/* Temperature runs through the same nine steps as the reading on the front page,
+   rather than from nothing to one colour. */
+.hm-ramp--temp {
+  background: linear-gradient(90deg, var(--warm-0), var(--warm-2), var(--warm-4),
+                              var(--warm-6), var(--warm-8));
+}
+
+/* A phone cannot show 53 columns of squares and still have squares. It scrolls. */
+@media (max-width: 40rem) {
+  .climate-heatmap { overflow-x: auto; }
+  .hm-grid, .hm-months { min-width: 34rem; }
 }
 
 @media print {

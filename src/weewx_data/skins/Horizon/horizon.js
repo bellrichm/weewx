@@ -40,6 +40,47 @@
     };
   }
 
+  /* The menu the masthead controls fold into on a phone. The stylesheet decides
+     whether there is a button at all; this only opens and closes it. */
+  function setupNavToggle() {
+    var button = document.getElementById('nav-toggle');
+    var tools = document.getElementById('masthead-tools');
+    if (!button || !tools) return;
+
+    var close = function () {
+      delete tools.dataset.open;
+      button.setAttribute('aria-expanded', 'false');
+    };
+
+    button.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (tools.dataset.open === undefined) {
+        tools.dataset.open = '';
+        button.setAttribute('aria-expanded', 'true');
+      } else {
+        close();
+      }
+    });
+
+    /* A tap anywhere else, or Escape, puts it away. Not a tap inside it: choosing a
+       unit there should leave it open to choose something else. */
+    document.addEventListener('click', function (e) {
+      if (tools.dataset.open !== undefined && !tools.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && tools.dataset.open !== undefined) {
+        close();
+        button.focus();
+      }
+    });
+
+    /* Following a link leaves the page anyway, and leaving it open would have it
+       flash back into view on the way out. */
+    tools.addEventListener('click', function (e) {
+      if (e.target.closest('a')) close();
+    });
+  }
+
   function setupThemeToggle() {
     var button = document.getElementById('theme-toggle');
     if (!button) return;
@@ -310,6 +351,13 @@
     };
   }
 
+  /* A label spaced the way the one it replaces was spaced. */
+  function respace(was, now) {
+    if (!now) return now;
+    var lead = was && /^\s/.test(was) ? ' ' : '';
+    return lead + now.replace(/^\s+/, '');
+  }
+
   /* Rewrite the readings the server put on the page.
 
      Each of them carries the number as the database holds it and the unit that number
@@ -317,7 +365,23 @@
      text stays as the server wrote it until a reader chooses otherwise, which is what
      a reader without JavaScript sees, and what everyone sees first. */
   function applyUnitsToPanels(root) {
-    (root || document).querySelectorAll('[data-unit][data-value]').forEach(function (el) {
+    var scope = root || document;
+
+    /* A column heading that names the unit for the column under it, and carries no
+       reading of its own. Only the label moves; there is no number here to convert. */
+    scope.querySelectorAll('[data-unit]:not([data-value])').forEach(function (el) {
+      var label = el.querySelector('[data-unit-label]');
+      if (!label) return;
+      if (label.dataset.asWritten === undefined) {
+        label.dataset.asWritten = label.textContent;
+      }
+      var out = convertReading(1, el.dataset.unit, el.dataset.obs || el.dataset.live);
+      label.textContent = out
+        ? respace(label.dataset.asWritten, out.label)
+        : label.dataset.asWritten;
+    });
+
+    scope.querySelectorAll('[data-unit][data-value]').forEach(function (el) {
       /* 'data-obs' first: it names the observation type, while 'data-live' names the
          field in current.json. They differ where one is derived from the other, as
          'rainToday' is from 'rain', and only the type is in the unit table. */
@@ -342,9 +406,42 @@
         label.dataset.asWritten = label.textContent;
       }
       setLive(target, fmtNumber(out.value, decimalsFor(out.unit)));
-      if (label) label.textContent = out.label;
+      /* The skin writes some labels with a leading space and some without, and the
+         unit table strips them all. Put back whatever the server had used here, so a
+         converted reading is spaced like the one it replaced. */
+      if (label) label.textContent = respace(label.dataset.asWritten, out.label);
     });
   }
+
+  /* What another script on the page needs in order to show its own numbers in the
+     reader's unit. Four functions and nothing else: the tables and the reader's
+     choice stay in here, so there is one of each on the page.
+
+     Used by climate.js, which draws from data the server put in the page rather than
+     from the plot files, and so cannot go through the chart path above. */
+  CFG.units = {
+    /* The unit this reading should be shown in, or null to leave it alone. */
+    target: targetUnit,
+    /* {value, unit, label} in that unit, or null where nothing has to change. */
+    convert: convertReading,
+    /* How many decimals the skin writes for that unit. */
+    decimals: decimalsFor,
+    /* Whether a reader has chosen a unit system at all. */
+    chosen: function () { return recall('units', ''); }
+  };
+
+  /* The tooltip, for a chart this file did not build. Pass a function that writes
+     the contents for one point; the box, its placement and the touch handling are
+     the ones the charts on this page use. */
+  CFG.tooltip = function (render) {
+    return tooltipPlugin(null, render);
+  };
+
+  /* The colour this skin gives a temperature, so that the same reading is the same
+     colour wherever it appears. Celsius in, CSS colour out. */
+  CFG.tempColour = function (celsius) {
+    return tempColour(celsius, warmStops());
+  };
 
   /* Which systems this station's readings can be shown in. Empty where the station
      publishes no unit table, which is any skin whose generator predates it. */
@@ -397,6 +494,8 @@
     charts.forEach(function (entry) {
       if (entry.raw) updateChart(entry, entry.raw);
     });
+    /* For anything on the page that holds numbers of its own. */
+    document.dispatchEvent(new CustomEvent('horizon:units'));
   }
 
   /* -------------------------------------------------------------- shaping */
@@ -695,7 +794,17 @@
     };
   }
 
-  function tooltipPlugin(meta) {
+  /* The box that follows the cursor, and the reading it shows.
+
+     'render' is optional. Without it the box lists the series of a plot file, which
+     is what the charts on this page hold. With it, the caller writes the contents:
+     the climate page draws from monthly figures rather than from a plot file, and its
+     x axis counts months rather than seconds.
+
+     Everything else is shared, and the part worth sharing is the touch handling: a
+     touch screen has no hover, so reading a chart with a finger has to be told apart
+     from scrolling past it. */
+  function tooltipPlugin(meta, render) {
     var el;
     return {
       hooks: {
@@ -745,6 +854,15 @@
             el.style.opacity = '0';
             return;
           }
+
+          if (render) {
+            var written = render(u, idx);
+            if (!written) { el.style.opacity = '0'; return; }
+            el.innerHTML = written;
+            place(u);
+            return;
+          }
+
           var ts = u.data[0][idx];
           var rows = '';
           var any = false;
@@ -766,19 +884,23 @@
           if (!any) { el.style.opacity = '0'; return; }
 
           el.innerHTML = '<div class="t-time">' + escapeHtml(fmtTime(ts, meta._period)) + '</div>' + rows;
-          el.style.opacity = '1';
-
-          /* Keep the tooltip inside the plot. */
-          var w = el.offsetWidth, h = el.offsetHeight;
-          var left = u.cursor.left + 14;
-          if (left + w > u.bbox.width / devicePixelRatio) left = u.cursor.left - w - 14;
-          var top = u.cursor.top - h - 10;
-          if (top < 0) top = u.cursor.top + 16;
-          el.style.left = left + 'px';
-          el.style.top = top + 'px';
+          place(u);
         }
       }
     };
+
+    /* Beside the cursor, and inside the plot. Above it where there is room, below it
+       at the top of the chart, and on the other side near the right edge. */
+    function place(u) {
+      el.style.opacity = '1';
+      var w = el.offsetWidth, h = el.offsetHeight;
+      var left = u.cursor.left + 14;
+      if (left + w > u.bbox.width / devicePixelRatio) left = u.cursor.left - w - 14;
+      var top = u.cursor.top - h - 10;
+      if (top < 0) top = u.cursor.top + 16;
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+    }
   }
 
   function escapeHtml(s) {
@@ -1117,12 +1239,19 @@
     entry.raw = raw;
     plot.setData(align(entry.meta.series), whole);
 
-    /* The table is built from the data, so it is rebuilt as well. Only while it is
-       open: a closed one is rebuilt when the reader opens it. */
-    var details = entry.host.closest('.chart-card').querySelector('.chart-data');
-    if (details && details.open) {
-      details.querySelector('.scroller-host').innerHTML =
-        renderTable(entry.meta, digitsFor(entry.meta.series));
+    /* The table is built from the data, so it is rebuilt as well. A closed one is
+       marked instead of rebuilt, and built again when the reader opens it: rebuilding
+       eleven tables nobody is looking at, once a minute, is work for nothing. */
+    var card = entry.host.closest('.chart-card');
+    var details = card && card.querySelector('.chart-data');
+    if (details) {
+      if (details.open) {
+        details.querySelector('.scroller-host').innerHTML =
+          renderTable(entry.meta, digitsFor(entry.meta.series));
+        delete details.dataset.stale;
+      } else {
+        details.dataset.stale = '1';
+      }
     }
     return true;
   }
@@ -1980,9 +2109,24 @@
     var container = document.getElementById('charts');
     if (container) {
       container.addEventListener('toggle', function (e) {
-        if (e.target.matches('details.chart-data') && e.target.open) {
-          var card = e.target.closest('.chart-card');
-          if (card) hydrate(card);
+        if (!e.target.matches('details.chart-data') || !e.target.open) return;
+        var card = e.target.closest('.chart-card');
+        if (!card) return;
+        /* Never drawn: fetch and draw it, table and all. */
+        if (!card.dataset.loaded) {
+          hydrate(card);
+          return;
+        }
+        /* Drawn, but the data or the unit moved on while this was closed. */
+        if (e.target.dataset.stale) {
+          var entry = charts.find(function (c) {
+            return c.host === card.querySelector('.chart-host');
+          });
+          if (entry) {
+            e.target.querySelector('.scroller-host').innerHTML =
+              renderTable(entry.meta, digitsFor(entry.meta.series));
+          }
+          delete e.target.dataset.stale;
         }
       }, true);
     }
@@ -2175,6 +2319,11 @@
           /* The sections just swapped in were rendered by the server, in the report's
              own unit. */
           applyUnitsToPanels();
+          /* Anything that drew into a panel has just had its drawing thrown away,
+             along with any listener it had bound to an element inside one. This says
+             the swap is finished and the new elements are in the document. The event
+             on the live update announces the record; this one announces the DOM. */
+          document.dispatchEvent(new CustomEvent('horizon:panels'));
         }
       })
       .catch(function () { pageFetch = false; });
@@ -2330,6 +2479,7 @@
 
   function init() {
     CFG.text = CFG.text || {};
+    setupNavToggle();
     setupThemeToggle();
     setupToTop();
     setupUnitPicker();
